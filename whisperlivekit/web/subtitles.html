@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhisperLiveKit Subtitles</title>
+    <link rel="stylesheet" href="subtitles.css" />
+</head>
+
+<body>
+    <main id="stage">
+        <div id="captionBox" class="empty">
+            <div id="captionClip">
+                <div id="captionText"><span id="captionCommitted"></span><span id="captionPending"></span></div>
+            </div>
+        </div>
+    </main>
+
+    <aside id="statsPanel" aria-label="Technical statistics">
+        <div class="stats-row"><span>Connection</span><span id="statConnection">Idle</span></div>
+        <div class="stats-row"><span>Input</span><span id="statInput">–</span></div>
+        <div class="stats-row"><span>Session</span><span id="statTimer">00:00</span></div>
+        <div class="stats-row"><span>Compute lag</span><span id="statCompute">–</span></div>
+        <div class="stats-row"><span>Policy lag</span><span id="statPolicy">–</span></div>
+        <div class="stats-row"><span>Diarization lag</span><span id="statDiarization">–</span></div>
+        <div class="stats-row"><span>Updates/s</span><span id="statRate">–</span></div>
+        <div class="stats-row"><span>Status</span><span id="statStatus">–</span></div>
+        <div class="stats-row"><span>Mic level</span><span class="level-meter"><span id="statLevel"></span></span></div>
+        <div id="statError" class="stats-error" role="alert" hidden></div>
+    </aside>
+
+    <div class="controls">
+        <p id="status" role="status" hidden></p>
+        <button id="recordButton" type="button" title="Start / stop (Space)">Start</button>
+        <button id="fullscreenButton" class="icon-button" type="button" title="Fullscreen (F)">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            </svg>
+        </button>
+        <button id="settingsToggle" class="icon-button" type="button" title="Settings (S)">
+            <img src="web/src/settings.svg" alt="Settings" />
+        </button>
+    </div>
+
+    <section id="settingsPanel" class="settings-panel" aria-label="Subtitle settings" hidden>
+        <div class="panel-header">
+            <strong>Subtitle settings</strong>
+            <button id="settingsClose" type="button" class="close-button" title="Close (Esc)">&times;</button>
+        </div>
+
+        <fieldset>
+            <legend>Audio</legend>
+            <div class="field">
+                <label for="websocketInput">WebSocket URL</label>
+                <input id="websocketInput" type="text" placeholder="ws://host:port/asr" />
+            </div>
+            <div class="field">
+                <label for="microphoneSelect">Microphone</label>
+                <select id="microphoneSelect">
+                    <option value="">Default Microphone</option>
+                </select>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Layout</legend>
+            <div class="row">
+                <label for="setRows">Rows</label>
+                <input id="setRows" type="range" min="1" max="10" step="1" data-setting="rows" />
+                <output data-for="rows"></output>
+            </div>
+            <div class="row">
+                <label for="setFontSize">Font size</label>
+                <input id="setFontSize" type="range" min="16" max="200" step="2" data-setting="fontSize" />
+                <output data-for="fontSize"></output>
+            </div>
+            <div class="row">
+                <label for="setLineHeight">Line spacing</label>
+                <input id="setLineHeight" type="range" min="1" max="2" step="0.05" data-setting="lineHeight" />
+                <output data-for="lineHeight"></output>
+            </div>
+            <div class="row">
+                <label for="setMaxWidth">Width</label>
+                <input id="setMaxWidth" type="range" min="30" max="100" step="1" data-setting="maxWidth" />
+                <output data-for="maxWidth"></output>
+            </div>
+            <div class="row">
+                <label for="setMargin">Edge margin</label>
+                <input id="setMargin" type="range" min="0" max="30" step="1" data-setting="margin" />
+                <output data-for="margin"></output>
+            </div>
+            <div class="row">
+                <label for="setPosition">Position</label>
+                <select id="setPosition" data-setting="position">
+                    <option value="bottom">Bottom</option>
+                    <option value="center">Center</option>
+                    <option value="top">Top</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="setAlign">Alignment</label>
+                <select id="setAlign" data-setting="align">
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                </select>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Text</legend>
+            <div class="row">
+                <label for="setFontFamily">Font</label>
+                <select id="setFontFamily" data-setting="fontFamily">
+                    <option value="system">System sans-serif</option>
+                    <option value="arial">Arial</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="tahoma">Tahoma</option>
+                    <option value="trebuchet">Trebuchet MS</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="times">Times New Roman</option>
+                    <option value="mono">Monospace</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="setFontWeight">Weight</label>
+                <select id="setFontWeight" data-setting="fontWeight">
+                    <option value="400">Normal</option>
+                    <option value="600">Semi-bold</option>
+                    <option value="700">Bold</option>
+                    <option value="800">Extra bold</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="setTextColor">Text color</label>
+                <input id="setTextColor" type="color" data-setting="textColor" />
+            </div>
+            <div class="row">
+                <label for="setEffect">Effect</label>
+                <select id="setEffect" data-setting="effect">
+                    <option value="none">None</option>
+                    <option value="shadow">Shadow</option>
+                    <option value="outline">Outline</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="setEffectColor">Effect color</label>
+                <input id="setEffectColor" type="color" data-setting="effectColor" />
+            </div>
+            <label class="check"><input type="checkbox" data-setting="uppercase" /> Uppercase</label>
+            <label class="check"><input type="checkbox" data-setting="dimPending" /> Dim unconfirmed text</label>
+        </fieldset>
+
+        <fieldset>
+            <legend>Background</legend>
+            <div class="row">
+                <label for="setBgColor">Page color</label>
+                <input id="setBgColor" type="color" data-setting="bgColor" />
+            </div>
+            <label class="check"><input type="checkbox" data-setting="transparentBg" /> Transparent page (OBS browser source)</label>
+            <div class="row">
+                <label for="setBoxColor">Caption box</label>
+                <input id="setBoxColor" type="color" data-setting="boxColor" />
+            </div>
+            <div class="row">
+                <label for="setBoxOpacity">Box opacity</label>
+                <input id="setBoxOpacity" type="range" min="0" max="100" step="5" data-setting="boxOpacity" />
+                <output data-for="boxOpacity"></output>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Behaviour</legend>
+            <div class="row">
+                <label for="setClearAfter">Clear after silence</label>
+                <input id="setClearAfter" type="range" min="0" max="30" step="1" data-setting="clearAfter" />
+                <output data-for="clearAfter"></output>
+            </div>
+            <label class="check"><input type="checkbox" data-setting="showStats" /> Show technical stats</label>
+            <div class="row">
+                <label for="setStatsCorner">Stats corner</label>
+                <select id="setStatsCorner" data-setting="statsCorner">
+                    <option value="top-left">Top left</option>
+                    <option value="top-right">Top right</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
+                </select>
+            </div>
+        </fieldset>
+
+        <div class="panel-actions">
+            <button id="clearButton" type="button">Clear screen</button>
+            <button id="resetButton" type="button">Reset to defaults</button>
+        </div>
+        <p class="shortcuts">Space start/stop · F fullscreen · S settings · T stats · C clear</p>
+    </section>
+
+    <script src="subtitles.js"></script>
+</body>
+
+</html>

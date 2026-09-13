@@ -14,6 +14,7 @@ _LAZY_EXPORTS = {
     "TestState": "test_harness",
     "get_web_interface_html": "web.web_interface",
     "get_inline_ui_html": "web.web_interface",
+    "get_inline_subtitles_html": "web.web_interface",
 }
 
 __all__ = ["WhisperLiveKitConfig", "parse_args", *_LAZY_EXPORTS]

@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, File, Form, Request, UploadFile, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
-from whisperlivekit import AudioProcessor, TranscriptionEngine, get_inline_ui_html, parse_args
+from whisperlivekit import AudioProcessor, TranscriptionEngine, get_inline_subtitles_html, get_inline_ui_html, parse_args
 from whisperlivekit.api_auth import websocket_token
 from whisperlivekit.config import WhisperLiveKitConfig, parse_cors_origins
 from whisperlivekit.processing_queue import PipelineClosed, PipelineOverloaded
@@ -57,6 +57,12 @@ router = APIRouter()
 @router.get("/")
 async def get():
     return HTMLResponse(get_inline_ui_html())
+
+
+@router.get("/subtitles")
+async def get_subtitles():
+    """Caption-only page for projecting live subtitles on a screen."""
+    return HTMLResponse(get_inline_subtitles_html())
 
 
 @router.get("/health")

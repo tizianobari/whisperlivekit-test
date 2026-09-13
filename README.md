@@ -54,6 +54,7 @@ pip install whisperlivekit
 ```bash
 
 # Start the server — open http://localhost:8000 and start talking
+# (or http://localhost:8000/subtitles for a caption-only display)
 wlk --model base --language en
 
 
@@ -383,7 +384,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await audio_processor.process_audio(message)        
 ```
 
-**Frontend Implementation**: The package includes an HTML/JavaScript implementation [here](https://github.com/QuentinFuxa/WhisperLiveKit/blob/main/whisperlivekit/web/live_transcription.html). You can also import it using `from whisperlivekit import get_inline_ui_html` & `page = get_inline_ui_html()`
+**Frontend Implementation**: The package includes an HTML/JavaScript implementation [here](https://github.com/QuentinFuxa/WhisperLiveKit/blob/main/whisperlivekit/web/live_transcription.html). You can also import it using `from whisperlivekit import get_inline_ui_html` & `page = get_inline_ui_html()`. A caption-only page for projecting subtitles on a screen is served at `/subtitles` (`get_inline_subtitles_html()`), with adjustable rows, font, colors, fullscreen and optional technical stats.
 
 
 ## Parameters & Configuration

@@ -4,94 +4,89 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# (tag in the HTML, SVG file in web/src, alt text of the inlined image)
+_SVG_IMAGES = (
+    ('<img src="/web/src/system_mode.svg" alt="" />', 'system_mode.svg', ''),
+    ('<img src="/web/src/light_mode.svg" alt="" />', 'light_mode.svg', ''),
+    ('<img src="/web/src/dark_mode.svg" alt="" />', 'dark_mode.svg', ''),
+    ('<img src="web/src/settings.svg" alt="Settings" />', 'settings.svg', ''),
+)
+
+
+def _read_web_file(*parts):
+    with resources.files('whisperlivekit.web').joinpath(*parts).open('r', encoding='utf-8') as f:
+        return f.read()
+
+
+def _svg_data_uri(name):
+    svg = _read_web_file('src', name)
+    return f"data:image/svg+xml;base64,{base64.b64encode(svg.encode('utf-8')).decode('utf-8')}"
+
+
 def get_web_interface_html():
     """Loads the HTML for the web interface using importlib.resources."""
     try:
-        with resources.files('whisperlivekit.web').joinpath('live_transcription.html').open('r', encoding='utf-8') as f:
-            return f.read()
+        return _read_web_file('live_transcription.html')
     except Exception as e:
         logger.error(f"Error loading web interface HTML: {e}")
         return "<html><body><h1>Error loading interface</h1></body></html>"
 
+
+def _inline_page(html_name, css_name, js_name):
+    """Returns a page with its CSS, JS, audio worklet/worker and SVG icons embedded."""
+    html_content = _read_web_file(html_name)
+    css_content = _read_web_file(css_name)
+    js_content = _read_web_file(js_name)
+    worklet_code = _read_web_file('pcm_worklet.js')
+    worker_code = _read_web_file('recorder_worker.js')
+
+    js_content = js_content.replace(
+        'await audioContext.audioWorklet.addModule("/web/pcm_worklet.js");',
+        'const workletBlob = new Blob([`' + worklet_code + '`], { type: "application/javascript" });\n' +
+        'const workletUrl = URL.createObjectURL(workletBlob);\n' +
+        'await audioContext.audioWorklet.addModule(workletUrl);'
+    )
+    js_content = js_content.replace(
+        'recorderWorker = new Worker("/web/recorder_worker.js");',
+        'const workerBlob = new Blob([`' + worker_code + '`], { type: "application/javascript" });\n' +
+        'const workerUrl = URL.createObjectURL(workerBlob);\n' +
+        'recorderWorker = new Worker(workerUrl);'
+    )
+
+    # Replace external references
+    html_content = html_content.replace(
+        f'<link rel="stylesheet" href="{css_name}" />',
+        f'<style>\n{css_content}\n</style>'
+    )
+    html_content = html_content.replace(
+        f'<script src="{js_name}"></script>',
+        f'<script>\n{js_content}\n</script>'
+    )
+
+    # Replace SVG references
+    for tag, svg_name, alt in _SVG_IMAGES:
+        if tag in html_content:
+            html_content = html_content.replace(tag, f'<img src="{_svg_data_uri(svg_name)}" alt="{alt}" />')
+
+    return html_content
+
+
 def get_inline_ui_html():
     """Returns the complete web interface HTML with all assets embedded in a single call."""
     try:
-        with resources.files('whisperlivekit.web').joinpath('live_transcription.html').open('r', encoding='utf-8') as f:
-            html_content = f.read()
-        with resources.files('whisperlivekit.web').joinpath('live_transcription.css').open('r', encoding='utf-8') as f:
-            css_content = f.read()
-        with resources.files('whisperlivekit.web').joinpath('live_transcription.js').open('r', encoding='utf-8') as f:
-            js_content = f.read()
-
-        with resources.files('whisperlivekit.web').joinpath('pcm_worklet.js').open('r', encoding='utf-8') as f:
-            worklet_code = f.read()
-        with resources.files('whisperlivekit.web').joinpath('recorder_worker.js').open('r', encoding='utf-8') as f:
-            worker_code = f.read()
-
-        js_content = js_content.replace(
-            'await audioContext.audioWorklet.addModule("/web/pcm_worklet.js");',
-            'const workletBlob = new Blob([`' + worklet_code + '`], { type: "application/javascript" });\n' +
-            'const workletUrl = URL.createObjectURL(workletBlob);\n' +
-            'await audioContext.audioWorklet.addModule(workletUrl);'
-        )
-        js_content = js_content.replace(
-            'recorderWorker = new Worker("/web/recorder_worker.js");',
-            'const workerBlob = new Blob([`' + worker_code + '`], { type: "application/javascript" });\n' +
-            'const workerUrl = URL.createObjectURL(workerBlob);\n' +
-            'recorderWorker = new Worker(workerUrl);'
-        )
-
-        # SVG files
-        with resources.files('whisperlivekit.web').joinpath('src', 'system_mode.svg').open('r', encoding='utf-8') as f:
-            system_svg = f.read()
-            system_data_uri = f"data:image/svg+xml;base64,{base64.b64encode(system_svg.encode('utf-8')).decode('utf-8')}"
-        with resources.files('whisperlivekit.web').joinpath('src', 'light_mode.svg').open('r', encoding='utf-8') as f:
-            light_svg = f.read()
-            light_data_uri = f"data:image/svg+xml;base64,{base64.b64encode(light_svg.encode('utf-8')).decode('utf-8')}"
-        with resources.files('whisperlivekit.web').joinpath('src', 'dark_mode.svg').open('r', encoding='utf-8') as f:
-            dark_svg = f.read()
-            dark_data_uri = f"data:image/svg+xml;base64,{base64.b64encode(dark_svg.encode('utf-8')).decode('utf-8')}"
-        with resources.files('whisperlivekit.web').joinpath('src', 'settings.svg').open('r', encoding='utf-8') as f:
-            settings = f.read()
-            settings_uri = f"data:image/svg+xml;base64,{base64.b64encode(settings.encode('utf-8')).decode('utf-8')}"
-
-        # Replace external references
-        html_content = html_content.replace(
-            '<link rel="stylesheet" href="live_transcription.css" />',
-            f'<style>\n{css_content}\n</style>'
-        )
-
-        html_content = html_content.replace(
-            '<script src="live_transcription.js"></script>',
-            f'<script>\n{js_content}\n</script>'
-        )
-
-        # Replace SVG references
-        html_content = html_content.replace(
-            '<img src="/web/src/system_mode.svg" alt="" />',
-            f'<img src="{system_data_uri}" alt="" />'
-        )
-
-        html_content = html_content.replace(
-            '<img src="/web/src/light_mode.svg" alt="" />',
-            f'<img src="{light_data_uri}" alt="" />'
-        )
-
-        html_content = html_content.replace(
-            '<img src="/web/src/dark_mode.svg" alt="" />',
-            f'<img src="{dark_data_uri}" alt="" />'
-        )
-
-        html_content = html_content.replace(
-            '<img src="web/src/settings.svg" alt="Settings" />',
-            f'<img src="{settings_uri}" alt="" />'
-        )
-
-        return html_content
-
+        return _inline_page('live_transcription.html', 'live_transcription.css', 'live_transcription.js')
     except Exception as e:
         logger.error(f"Error creating embedded web interface: {e}")
         return "<html><body><h1>Error loading embedded interface</h1></body></html>"
+
+
+def get_inline_subtitles_html():
+    """Returns the caption-only subtitle page with all assets embedded."""
+    try:
+        return _inline_page('subtitles.html', 'subtitles.css', 'subtitles.js')
+    except Exception as e:
+        logger.error(f"Error creating embedded subtitles interface: {e}")
+        return "<html><body><h1>Error loading subtitles interface</h1></body></html>"
 
 
 if __name__ == '__main__':
@@ -112,5 +107,9 @@ if __name__ == '__main__':
     @app.get("/")
     async def get():
         return HTMLResponse(get_inline_ui_html())
+
+    @app.get("/subtitles")
+    async def get_subtitles():
+        return HTMLResponse(get_inline_subtitles_html())
 
     uvicorn.run(app=app)
