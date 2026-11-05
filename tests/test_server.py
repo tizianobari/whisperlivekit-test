@@ -86,6 +86,7 @@ async def test_native_websocket_passes_context_and_advertises_capability(monkeyp
         "maxCharacters": 1000,
         "backend": "faster-whisper",
     }
+    assert config_message["translation"] == {"enabled": False, "targetLanguage": None}
     assert cleaned == [True]
 
     async def fail_startup(self):

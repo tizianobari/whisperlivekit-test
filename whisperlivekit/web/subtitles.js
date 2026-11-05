@@ -53,6 +53,9 @@ const DEFAULT_SETTINGS = {
   fontFamily: "system",
   fontWeight: "600",
   textColor: "#ffffff",
+  translationColor: "#ffd75e",
+  displayMode: "original",
+  targetLanguage: "",
   effect: "none",
   effectColor: "#000000",
   uppercase: false,
@@ -76,6 +79,7 @@ const FONT_STACKS = {
   mono: 'ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace',
 };
 const POSITION_JUSTIFY = { top: "flex-start", center: "center", bottom: "flex-end" };
+const DISPLAY_MODES = ["original", "translation", "both"];
 
 const rootStyle = document.documentElement.style;
 const statusText = document.getElementById("status");
@@ -89,9 +93,8 @@ const microphoneSelect = document.getElementById("microphoneSelect");
 const clearButton = document.getElementById("clearButton");
 const resetButton = document.getElementById("resetButton");
 const captionBox = document.getElementById("captionBox");
-const captionText = document.getElementById("captionText");
-const captionCommitted = document.getElementById("captionCommitted");
-const captionPending = document.getElementById("captionPending");
+const translationBox = document.getElementById("translationBox");
+const translationText = document.getElementById("translationText");
 const statsPanel = document.getElementById("statsPanel");
 const statConnection = document.getElementById("statConnection");
 const statInput = document.getElementById("statInput");
@@ -100,6 +103,7 @@ const statCompute = document.getElementById("statCompute");
 const statPolicy = document.getElementById("statPolicy");
 const statDiarization = document.getElementById("statDiarization");
 const statRate = document.getElementById("statRate");
+const statTranslation = document.getElementById("statTranslation");
 const statStatus = document.getElementById("statStatus");
 const statLevel = document.getElementById("statLevel");
 const statError = document.getElementById("statError");
@@ -193,6 +197,8 @@ function applySettings() {
   rootStyle.setProperty("--sub-font", FONT_STACKS[settings.fontFamily] || FONT_STACKS.system);
   rootStyle.setProperty("--sub-weight", settings.fontWeight);
   rootStyle.setProperty("--sub-color", settings.textColor);
+  rootStyle.setProperty("--sub-translation-color", settings.translationColor);
+  document.body.dataset.display = DISPLAY_MODES.includes(settings.displayMode) ? settings.displayMode : "original";
   rootStyle.setProperty("--sub-transform", settings.uppercase ? "uppercase" : "none");
   rootStyle.setProperty("--sub-pending-opacity", settings.dimPending ? "0.6" : "1");
   rootStyle.setProperty(
@@ -208,6 +214,7 @@ function applySettings() {
   statsPanel.dataset.corner = settings.statsCorner;
   document.body.dataset.statsCorner = settings.showStats ? settings.statsCorner : "";
   updateStatsReserve();
+  updateTranslationWarning();
 
   settingsPanel.querySelectorAll("output[data-for]").forEach((output) => {
     output.textContent = formatSetting(output.dataset.for, settings[output.dataset.for]);
@@ -223,6 +230,19 @@ function updateStatsReserve() {
 }
 
 settingInputs.forEach((input) => {
+  if (input.dataset.setting === "targetLanguage") {
+    // The target language is fixed per server session, so apply it only once
+    // editing is done (change), not on every keystroke.
+    input.addEventListener("change", () => {
+      const value = input.value.trim();
+      input.value = value;
+      if (value === settings.targetLanguage) return;
+      settings.targetLanguage = value;
+      saveSettings();
+      handleTargetLanguageChange();
+    });
+    return;
+  }
   input.addEventListener("input", () => {
     settings[input.dataset.setting] = readInput(input);
     applySettings();
@@ -231,27 +251,24 @@ settingInputs.forEach((input) => {
 });
 
 resetButton.addEventListener("click", () => {
+  const previousTarget = settings.targetLanguage;
   settings = { ...DEFAULT_SETTINGS };
   syncInputs();
   applySettings();
   saveSettings();
+  if (settings.targetLanguage !== previousTarget) {
+    handleTargetLanguageChange();
+  }
 });
 
 if ("ResizeObserver" in window) {
   new ResizeObserver(updateStatsReserve).observe(statsPanel);
 }
 
-syncInputs();
-applySettings();
-
 // ---------------------------------------------------------------------------
 // Caption rendering
 // ---------------------------------------------------------------------------
 
-let clearedOffset = 0; // characters of the session text hidden by a clear
-let lastCaptionKey = null;
-let lastCommitted = "";
-let lastPending = "";
 let lastTextChange = 0;
 let fadeTimer = null;
 
@@ -259,47 +276,113 @@ function joinText(parts) {
   return parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
+// One caption block (original or translation). Each keeps its own clear
+// offset because the two texts have different lengths.
+function createCaptionTrack(box, textEl, committedEl, pendingEl) {
+  let clearedOffset = 0; // characters of the session text hidden by a clear
+  let lastKey = null;
+  let lastCommitted = "";
+  let lastPending = "";
+
+  function show(committed, pending) {
+    lastCommitted = committed;
+    lastPending = pending;
+    const full = joinText([committed, pending]);
+    if (full.length < clearedOffset) {
+      clearedOffset = 0; // the server session restarted
+    }
+
+    let start = Math.max(clearedOffset, full.length - MAX_CAPTION_CHARS);
+    if (start > 0 && start < full.length && full[start - 1] !== " ") {
+      // Never start mid-word: earlier text may have been revised since the cut.
+      const nextSpace = full.indexOf(" ", start);
+      start = nextSpace === -1 ? full.length : nextSpace + 1;
+    }
+    const pendingOffset = full.length - pending.length;
+    const committedPart = committed.slice(Math.min(start, committed.length)).trim();
+    const pendingPart = pending.slice(Math.max(0, start - pendingOffset)).trim();
+
+    const key = `${committedPart} ${pendingPart}`;
+    if (key === lastKey) return false;
+    lastKey = key;
+
+    committedEl.textContent = committedPart;
+    pendingEl.textContent = (committedPart && pendingPart ? " " : "") + pendingPart;
+    box.classList.toggle("empty", !committedPart && !pendingPart);
+    return true;
+  }
+
+  return {
+    box,
+    textEl,
+    show,
+    clear() {
+      clearedOffset = joinText([lastCommitted, lastPending]).length;
+      lastKey = null;
+      show(lastCommitted, lastPending);
+    },
+    resetSession() {
+      clearedOffset = 0; // a new server session starts with empty text
+    },
+    invalidate() {
+      lastKey = null; // force a re-render on the next server message
+    },
+    isEmpty() {
+      return box.classList.contains("empty");
+    },
+  };
+}
+
+const originalTrack = createCaptionTrack(
+  captionBox,
+  document.getElementById("captionText"),
+  document.getElementById("captionCommitted"),
+  document.getElementById("captionPending")
+);
+const translationTrack = createCaptionTrack(
+  translationBox,
+  translationText,
+  document.getElementById("translationCommitted"),
+  document.getElementById("translationPending")
+);
+const captionTracks = [originalTrack, translationTrack];
+
+function visibleTracks() {
+  switch (document.body.dataset.display) {
+    case "translation":
+      return [translationTrack];
+    case "both":
+      return captionTracks;
+    default:
+      return [originalTrack];
+  }
+}
+
 function renderCaption(data, isFinalizing = false) {
-  let committed = joinText((data.lines || []).filter((line) => line.speaker !== -2).map((line) => line.text));
+  const spoken = (data.lines || []).filter((line) => line.speaker !== -2);
+  let committed = joinText(spoken.map((line) => line.text));
   let pending = joinText([data.buffer_diarization, data.buffer_transcription]);
+  let translated = joinText(spoken.map((line) => line.translation));
+  let translationPending = joinText([data.buffer_translation]);
   if (isFinalizing) {
     committed = joinText([committed, pending]);
     pending = "";
+    translated = joinText([translated, translationPending]);
+    translationPending = "";
   }
-  showCaption(committed, pending);
+  const originalChanged = originalTrack.show(committed, pending);
+  const translationChanged = translationTrack.show(translated, translationPending);
+  if (originalChanged || translationChanged) {
+    markTextChange();
+  }
 }
 
-function showCaption(committed, pending) {
-  lastCommitted = committed;
-  lastPending = pending;
-  const full = joinText([committed, pending]);
-  if (full.length < clearedOffset) {
-    clearedOffset = 0; // the server session restarted
-  }
-
-  let start = Math.max(clearedOffset, full.length - MAX_CAPTION_CHARS);
-  if (start > 0 && start < full.length && full[start - 1] !== " ") {
-    // Never start mid-word: earlier text may have been revised since the cut.
-    const nextSpace = full.indexOf(" ", start);
-    start = nextSpace === -1 ? full.length : nextSpace + 1;
-  }
-  const pendingOffset = full.length - pending.length;
-  const committedPart = committed.slice(Math.min(start, committed.length)).trim();
-  const pendingPart = pending.slice(Math.max(0, start - pendingOffset)).trim();
-
-  const key = `${committedPart} ${pendingPart}`;
-  if (key === lastCaptionKey) return;
-  lastCaptionKey = key;
-
-  captionCommitted.textContent = committedPart;
-  captionPending.textContent = (committedPart && pendingPart ? " " : "") + pendingPart;
-  captionBox.classList.toggle("empty", !committedPart && !pendingPart);
-
+function markTextChange() {
   lastTextChange = Date.now();
   if (fadeTimer) {
     clearTimeout(fadeTimer);
     fadeTimer = null;
-    captionText.classList.remove("fading");
+    captionTracks.forEach((track) => track.textEl.classList.remove("fading"));
   }
 }
 
@@ -308,16 +391,19 @@ function clearCaption() {
     clearTimeout(fadeTimer);
     fadeTimer = null;
   }
-  captionText.classList.remove("fading");
-  clearedOffset = joinText([lastCommitted, lastPending]).length;
-  lastCaptionKey = null;
-  showCaption(lastCommitted, lastPending);
+  captionTracks.forEach((track) => {
+    track.textEl.classList.remove("fading");
+    track.clear();
+  });
 }
 
+// Fade only after silence in both texts: the translation usually lags the
+// original, so its updates also count as activity.
 setInterval(() => {
-  if (!settings.clearAfter || fadeTimer || captionBox.classList.contains("empty")) return;
+  if (!settings.clearAfter || fadeTimer) return;
+  if (visibleTracks().every((track) => track.isEmpty())) return;
   if (Date.now() - lastTextChange < settings.clearAfter * 1000) return;
-  captionText.classList.add("fading");
+  captionTracks.forEach((track) => track.textEl.classList.add("fading"));
   fadeTimer = setTimeout(clearCaption, FADE_DURATION_MS);
 }, 500);
 
@@ -349,12 +435,35 @@ function setError(text) {
   statError.hidden = !text;
 }
 
+// Translation capability reported by the server in its config message.
+let serverTranslation = null;
+
+function updateTranslationWarning() {
+  if (serverTranslation) {
+    statTranslation.textContent = serverTranslation.enabled ? serverTranslation.targetLanguage || "on" : "off";
+  } else {
+    statTranslation.textContent = settings.targetLanguage || "server default";
+  }
+  const missing = !!serverTranslation && !serverTranslation.enabled && settings.displayMode !== "original";
+  if (missing) {
+    setError("Translation is not enabled on the server (start it with --target-language).");
+    statError.dataset.source = "translation-config";
+  } else if (statError.dataset.source === "translation-config") {
+    setError("");
+    statError.dataset.source = "";
+  }
+}
+
 function renderStats(data) {
   setLag(statCompute, data.remaining_time_transcription_processing ?? data.remaining_time_transcription);
   setLag(statPolicy, data.remaining_time_transcription_policy);
   setLag(statDiarization, data.remaining_time_diarization);
   statStatus.textContent = data.status || "–";
-  setError(data.error || data.translation_error);
+  const serverError = data.error || data.translation_error;
+  if (serverError || statError.dataset.source !== "translation-config") {
+    statError.dataset.source = "";
+    setError(serverError);
+  }
 }
 
 function formatDuration(totalSeconds) {
@@ -458,6 +567,24 @@ function handleMicrophoneChange() {
   }
 }
 
+// The target language is a per-session query parameter: restart the session
+// so the server builds a translator for the new target.
+function handleTargetLanguageChange() {
+  const label = settings.targetLanguage || "server default";
+  console.log(`Target language changed: ${label}`);
+  updateTranslationWarning();
+  if (isRecording) {
+    setStatus(`Switching translation to ${label}... Please wait.`);
+    stopRecording().then(() => {
+      setTimeout(() => {
+        toggleRecording();
+      }, 1000);
+    });
+  } else {
+    setStatus(`Translation target: ${label}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket transport
 // ---------------------------------------------------------------------------
@@ -480,10 +607,20 @@ websocketInput.addEventListener("change", () => {
   setStatus("WebSocket URL updated. Ready to connect.");
 });
 
+function sessionUrl() {
+  const url = new URL(websocketUrl);
+  if (settings.targetLanguage) {
+    url.searchParams.set("target_language", settings.targetLanguage);
+  } else {
+    url.searchParams.delete("target_language");
+  }
+  return url.toString();
+}
+
 function setupWebSocket() {
   return new Promise((resolve, reject) => {
     try {
-      websocket = new WebSocket(websocketUrl);
+      websocket = new WebSocket(sessionUrl());
     } catch (error) {
       setStatus("Invalid WebSocket URL. Please check and try again.");
       reject(error);
@@ -494,8 +631,9 @@ function setupWebSocket() {
     websocket.onopen = () => {
       setStatus("Connected to server.");
       setConnection("Connected");
+      statError.dataset.source = "";
       setError("");
-      clearedOffset = 0; // a new server session starts with empty text
+      captionTracks.forEach((track) => track.resetSession());
       resolve();
     };
 
@@ -539,6 +677,9 @@ function setupWebSocket() {
       if (data.type === "config") {
         serverUseAudioWorklet = !!data.useAudioWorklet;
         statInput.textContent = serverUseAudioWorklet ? "PCM (AudioWorklet)" : "WebM (MediaRecorder)";
+        serverTranslation = data.translation || null;
+        translationText.lang = (serverTranslation && serverTranslation.targetLanguage) || "";
+        updateTranslationWarning();
         if (configReadyResolve) configReadyResolve();
         return;
       }
@@ -613,7 +754,7 @@ function scheduleReconnect() {
     try {
       await setupWebSocket();
       reconnectAttempts = 0;
-      lastCaptionKey = null; // force a re-render on the next server message
+      captionTracks.forEach((track) => track.invalidate());
       // PCM chunks resume on their own once the socket is OPEN again, but a
       // MediaRecorder WebM stream must restart so the new server session
       // receives fresh container headers.
@@ -952,11 +1093,21 @@ document.addEventListener("keydown", (e) => {
       applySettings();
       saveSettings();
       break;
+    case "l": {
+      const index = DISPLAY_MODES.indexOf(settings.displayMode);
+      settings.displayMode = DISPLAY_MODES[(index + 1) % DISPLAY_MODES.length];
+      syncInputs();
+      applySettings();
+      saveSettings();
+      break;
+    }
     case "c":
       clearCaption();
       break;
   }
 });
 
+syncInputs();
+applySettings();
 updateUI();
 markActive();

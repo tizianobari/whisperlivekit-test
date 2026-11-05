@@ -11,6 +11,7 @@
   --sub-max-width: 90%;
   --sub-margin: 5vh;
   --sub-color: #ffffff;
+  --sub-translation-color: #ffd75e;
   --sub-bg: #000000;
   --sub-box-bg: transparent;
   --sub-shadow: none;
@@ -60,10 +61,12 @@ body.idle * {
   flex-direction: column;
   justify-content: var(--sub-justify);
   align-items: center;
+  gap: 0.25em;
+  font-size: var(--sub-font-size);
   padding: calc(var(--sub-margin) + var(--stats-top)) 2vw calc(var(--sub-margin) + var(--stats-bottom));
 }
 
-#captionBox {
+.caption-box {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -78,13 +81,13 @@ body.idle * {
   transition: background-color 0.3s ease;
 }
 
-#captionBox.empty {
+.caption-box.empty {
   background: transparent;
 }
 
 /* Shows at most N rows as rendered after wrapping: the newest text is pinned to
    the bottom and anything above the last N rows overflows and is clipped. */
-#captionClip {
+.caption-clip {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -93,7 +96,7 @@ body.idle * {
   overflow: hidden;
 }
 
-#captionText {
+.caption-text {
   color: var(--sub-color);
   font-family: var(--sub-font);
   font-weight: var(--sub-weight);
@@ -107,12 +110,22 @@ body.idle * {
   transition: opacity 0.6s ease;
 }
 
-#captionText.fading {
+.caption-text.fading {
   opacity: 0;
 }
 
-#captionPending {
+.caption-pending {
   opacity: var(--sub-pending-opacity);
+}
+
+#translationText {
+  color: var(--sub-translation-color);
+}
+
+/* Display mode (original / translation / both), set on <body> by subtitles.js. */
+body[data-display="original"] #translationBox,
+body[data-display="translation"] #captionBox {
+  display: none;
 }
 
 /* Technical stats */

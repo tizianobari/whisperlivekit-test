@@ -425,6 +425,10 @@ Sent once, immediately after the connection is accepted.
     "supported": true,
     "maxCharacters": 1000,
     "backend": "faster-whisper"
+  },
+  "translation": {
+    "enabled": true,
+    "targetLanguage": "en"
   }
 }
 ```
@@ -435,6 +439,7 @@ Sent once, immediately after the connection is accepted.
 | `useAudioWorklet` | bool   | `true` when the server expects PCM s16le 16kHz mono input (started with `--pcm-input`). `false` when the server expects encoded audio (decoded server-side via FFmpeg). |
 | `mode`            | string | `"full"` or `"diff"`, echoing the requested mode. |
 | `context`         | object | Decoder-context capability for the configured backend. |
+| `translation`     | object | `enabled` is `true` when the server was started with translation (`--target-language`); `targetLanguage` is the target in effect for this session (the `target_language` query parameter, else the server default), or `null` when translation is disabled. |
 
 ### Transcription Update (full mode)
 

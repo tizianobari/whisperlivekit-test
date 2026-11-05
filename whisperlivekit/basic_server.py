@@ -158,6 +158,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 transcription_engine.args,
                 transcription_engine.asr,
             ),
+            # Same switch AudioProcessor uses for its translation queue: a
+            # per-session target_language only works when the server loaded a
+            # translation model at startup.
+            "translation": {
+                "enabled": bool(config.target_language),
+                "targetLanguage": (
+                    (session_target_language or config.target_language)
+                    if config.target_language else None
+                ),
+            },
         })
         results_generator = await audio_processor.create_tasks()
         websocket_task = asyncio.create_task(

@@ -10,9 +10,14 @@
 
 <body>
     <main id="stage">
-        <div id="captionBox" class="empty">
-            <div id="captionClip">
-                <div id="captionText"><span id="captionCommitted"></span><span id="captionPending"></span></div>
+        <div id="captionBox" class="caption-box empty">
+            <div class="caption-clip">
+                <div id="captionText" class="caption-text"><span id="captionCommitted"></span><span id="captionPending" class="caption-pending"></span></div>
+            </div>
+        </div>
+        <div id="translationBox" class="caption-box empty">
+            <div class="caption-clip">
+                <div id="translationText" class="caption-text" lang=""><span id="translationCommitted"></span><span id="translationPending" class="caption-pending"></span></div>
             </div>
         </div>
     </main>
@@ -24,6 +29,7 @@
         <div class="stats-row"><span>Compute lag</span><span id="statCompute">–</span></div>
         <div class="stats-row"><span>Policy lag</span><span id="statPolicy">–</span></div>
         <div class="stats-row"><span>Diarization lag</span><span id="statDiarization">–</span></div>
+        <div class="stats-row"><span>Translation</span><span id="statTranslation">–</span></div>
         <div class="stats-row"><span>Updates/s</span><span id="statRate">–</span></div>
         <div class="stats-row"><span>Status</span><span id="statStatus">–</span></div>
         <div class="stats-row"><span>Mic level</span><span class="level-meter"><span id="statLevel"></span></span></div>
@@ -60,6 +66,45 @@
                 <select id="microphoneSelect">
                     <option value="">Default Microphone</option>
                 </select>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Translation</legend>
+            <div class="row">
+                <label for="setDisplayMode">Show</label>
+                <select id="setDisplayMode" data-setting="displayMode">
+                    <option value="original">Original only</option>
+                    <option value="translation">Translation only</option>
+                    <option value="both">Original + translation</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="setTargetLanguage">Target language (empty = server default)</label>
+                <input id="setTargetLanguage" type="text" list="targetLanguageList" placeholder="e.g. en, it, fr" spellcheck="false" autocomplete="off" data-setting="targetLanguage" />
+                <datalist id="targetLanguageList">
+                    <option value="en">English</option>
+                    <option value="it">Italian</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="es">Spanish</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="nl">Dutch</option>
+                    <option value="pl">Polish</option>
+                    <option value="ro">Romanian</option>
+                    <option value="ru">Russian</option>
+                    <option value="uk">Ukrainian</option>
+                    <option value="ar">Arabic</option>
+                    <option value="tr">Turkish</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="hi">Hindi</option>
+                </datalist>
+            </div>
+            <div class="row">
+                <label for="setTranslationColor">Translation color</label>
+                <input id="setTranslationColor" type="color" data-setting="translationColor" />
             </div>
         </fieldset>
 
@@ -193,7 +238,7 @@
             <button id="clearButton" type="button">Clear screen</button>
             <button id="resetButton" type="button">Reset to defaults</button>
         </div>
-        <p class="shortcuts">Space start/stop · F fullscreen · S settings · T stats · C clear</p>
+        <p class="shortcuts">Space start/stop · F fullscreen · S settings · T stats · L language view · C clear</p>
     </section>
 
     <script src="subtitles.js"></script>

@@ -384,7 +384,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await audio_processor.process_audio(message)        
 ```
 
-**Frontend Implementation**: The package includes an HTML/JavaScript implementation [here](https://github.com/QuentinFuxa/WhisperLiveKit/blob/main/whisperlivekit/web/live_transcription.html). You can also import it using `from whisperlivekit import get_inline_ui_html` & `page = get_inline_ui_html()`. A caption-only page for projecting subtitles on a screen is served at `/subtitles` (`get_inline_subtitles_html()`), with adjustable rows, font, colors, fullscreen and optional technical stats.
+**Frontend Implementation**: The package includes an HTML/JavaScript implementation [here](https://github.com/QuentinFuxa/WhisperLiveKit/blob/main/whisperlivekit/web/live_transcription.html). You can also import it using `from whisperlivekit import get_inline_ui_html` & `page = get_inline_ui_html()`. A caption-only page for projecting subtitles on a screen is served at `/subtitles` (`get_inline_subtitles_html()`), with adjustable rows, font, colors, fullscreen and optional technical stats. When the server runs with translation (`--target-language`), its settings panel can show the original, the translation, or both stacked from the same audio, and can override the target language for that page.
 
 
 ## Parameters & Configuration
