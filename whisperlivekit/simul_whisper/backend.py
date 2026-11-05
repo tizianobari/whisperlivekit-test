@@ -374,6 +374,7 @@ class SimulStreamingASR:
                 tokenizer_is_multilingual= is_multilingual,
                 segment_length=self.min_chunk_size,
                 frame_threshold=self.frame_threshold,
+                rewind_threshold=getattr(self, "rewind_threshold", 200),
                 language=self.lan,
                 audio_max_len=self.audio_max_len,
                 audio_min_len=self.audio_min_len,

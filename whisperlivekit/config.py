@@ -114,6 +114,7 @@ class WhisperLiveKitConfig:
     disable_fast_encoder: bool = False
     custom_alignment_heads: Optional[str] = None
     frame_threshold: int = 25
+    rewind_threshold: int = 200
     beams: int = 1
     decoder_type: Optional[str] = None
     audio_max_len: float = 30.0
@@ -205,6 +206,12 @@ class WhisperLiveKitConfig:
                 "and have no effect. Speaker turns and --pause-segmentation-seconds "
                 "control transcript boundaries."
             )
+        if (
+            isinstance(self.rewind_threshold, bool)
+            or not isinstance(self.rewind_threshold, int)
+            or self.rewind_threshold <= 0
+        ):
+            raise ValueError("rewind_threshold must be a positive integer (frames).")
         self.pause_segmentation_seconds = validate_pause_segmentation_seconds(
             self.pause_segmentation_seconds
         )

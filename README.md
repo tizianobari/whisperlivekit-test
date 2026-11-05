@@ -451,6 +451,7 @@ simultaneous-speaker output.
 | `--custom-alignment-heads` | Use your own alignment heads, useful when `--model-dir` is used. Use `scripts/determine_alignment_heads.py` to extract them.
  | `None` |
 | `--frame-threshold` | AlignAtt frame threshold (lower = faster, higher = more accurate) | `25` |
+| `--rewind-threshold` | Backward attention jump, in frames (0.02 s), that discards and re-decodes the hypothesis. Raise it if text keeps restarting on repeated words | `200` |
 | `--beams` | Number of beams for beam search (1 = greedy decoding) | `1` |
 | `--decoder` | Force decoder type (`beam` or `greedy`) | `auto` |
 | `--audio-max-len` | Maximum audio buffer length (seconds) | `30.0` |

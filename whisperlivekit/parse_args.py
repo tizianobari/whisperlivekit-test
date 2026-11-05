@@ -718,6 +718,17 @@ def build_parser():
     )
 
     simulstreaming_group.add_argument(
+        "--rewind-threshold",
+        type=int,
+        default=200,
+        dest="rewind_threshold",
+        help="AlignAtt rewind threshold in frames (0.02 s each; default 200 = 4 s). "
+        "If attention jumps back by more than this, the current hypothesis is "
+        "discarded and re-decoded. Raise it when attention briefly revisits earlier "
+        "audio (seen with repeated words in lower-resource languages).",
+    )
+
+    simulstreaming_group.add_argument(
         "--beams",
         "-b",
         type=int,

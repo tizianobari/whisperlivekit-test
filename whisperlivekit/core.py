@@ -240,6 +240,7 @@ class TranscriptionEngine:
                     "disable_fast_encoder": config.disable_fast_encoder,
                     "custom_alignment_heads": config.custom_alignment_heads,
                     "frame_threshold": config.frame_threshold,
+                    "rewind_threshold": config.rewind_threshold,
                     "beams": config.beams,
                     "decoder_type": config.decoder_type,
                     "audio_max_len": config.audio_max_len,

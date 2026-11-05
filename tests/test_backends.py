@@ -94,6 +94,43 @@ def test_simulstreaming_uses_explicit_ct2_encoder_path(tmp_path, monkeypatch):
     assert load_calls[0][0] == "tiny"
     assert load_calls[0][1]["decoder_only"] is True
     assert asr.cfg.decoder_type == "greedy"
+    assert asr.cfg.rewind_threshold == 200
+
+
+def test_rewind_threshold_flows_from_cli_to_decoder_config(tmp_path, monkeypatch):
+    from whisperlivekit.parse_args import parse_args
+
+    monkeypatch.setattr(sys, "argv", ["wlk", "--rewind-threshold", "600"])
+    assert parse_args().rewind_threshold == 600
+
+    backend, _ = _patch_simul_loaders(monkeypatch)
+    asr = backend.SimulStreamingASR(
+        **_base_simul_kwargs(
+            encoder_model_path=str(_make_ct2_dir(tmp_path)),
+            rewind_threshold=600,
+        )
+    )
+    assert asr.cfg.rewind_threshold == 600
+
+
+@pytest.mark.parametrize("value", [0, -5, True, 2.5])
+def test_rewind_threshold_rejects_non_positive_integers(value):
+    from whisperlivekit.config import WhisperLiveKitConfig
+
+    with pytest.raises(ValueError, match="rewind_threshold"):
+        WhisperLiveKitConfig(rewind_threshold=value)
+
+
+def test_alignatt_raised_rewind_threshold_keeps_short_backward_excursion():
+    # Real Persian session: a repeated phrase made attention revisit its first
+    # occurrence for a few tokens (~470 frames back). At the default 200 that
+    # discards the hypothesis; a raised threshold keeps it.
+    frames = [400, 450, 500, 552, 129, 272, 277, 559, 566]
+    default = _make_alignatt_decode_tester(frames)
+    assert default.infer() == []
+
+    raised = _make_alignatt_decode_tester(frames, rewind_threshold=600)
+    assert [w.text for w in raised.infer()] == [f" w{i}" for i in range(10, 19)]
 
 
 def test_simulstreaming_uses_separate_encoder_and_decoder_paths(tmp_path, monkeypatch):
@@ -327,7 +364,7 @@ def _make_alignatt_timestamp_tester(offset=0.0):
     return aligner
 
 
-def _make_alignatt_decode_tester(frames, last_attend_frame=-200):
+def _make_alignatt_decode_tester(frames, last_attend_frame=-200, rewind_threshold=200):
     """Drive the real AlignAttBase.infer() loop with scripted attention.
 
     Token ``i`` (ids from 10) attends to ``frames[i]``; one word per token.
@@ -418,7 +455,7 @@ def _make_alignatt_decode_tester(frames, last_attend_frame=-200):
     aligner.cfg = SimpleNamespace(
         audio_min_len=0.0,
         language="en",
-        rewind_threshold=200,
+        rewind_threshold=rewind_threshold,
         frame_threshold=25,
         beam_size=1,
     )
