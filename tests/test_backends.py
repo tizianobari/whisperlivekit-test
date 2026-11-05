@@ -327,6 +327,154 @@ def _make_alignatt_timestamp_tester(offset=0.0):
     return aligner
 
 
+def _make_alignatt_decode_tester(frames, last_attend_frame=-200):
+    """Drive the real AlignAttBase.infer() loop with scripted attention.
+
+    Token ``i`` (ids from 10) attends to ``frames[i]``; one word per token.
+    End-of-text follows the script. The buffer is 30 s (1500 frames).
+    """
+    from whisperlivekit.simul_whisper.align_att_base import AlignAttBase
+
+    eot = 0
+    prefix = np.array([[1, 2, 3]])
+    script = list(frames)
+
+    class ScriptedTokenizer:
+        def split_to_word_tokens(self, tokens):
+            return [f" w{token}" for token in tokens], [[token] for token in tokens]
+
+        def decode(self, tokens):
+            return "".join(f" w{token}" for token in tokens)
+
+    class ScriptedAligner(AlignAttBase):
+        def _current_tokens(self):
+            return np.concatenate(self.state.tokens, axis=1)
+
+        _rewind_tokens = _current_tokens
+
+        def trim_context(self):
+            pass
+
+        def debug_print_tokens(self, tokens):
+            pass
+
+        def _concat_segments(self):
+            return None
+
+        def _encode(self, input_segments):
+            return np.zeros((1, 1500, 1)), 1500
+
+        def _evaluate(self, tensor):
+            pass
+
+        def fire_at_boundary(self, feature):
+            return False
+
+        def _init_sum_logprobs(self):
+            return None
+
+        def _get_logits_and_cross_attn(self, tokens, encoder_feature):
+            return np.zeros((1, 1, 1)), None
+
+        def _check_no_speech(self, logits):
+            return False
+
+        def _suppress_blank_tokens(self, logits):
+            return logits
+
+        def _apply_token_suppression(self, logits):
+            return logits
+
+        def _apply_dry_penalty(self, logits, current_tokens):
+            return logits
+
+        def _update_tokens(self, current_tokens, logits, sum_logprobs):
+            step = current_tokens.shape[1] - prefix.shape[1]
+            done = step >= len(script)
+            token = eot if done else 10 + step
+            return np.concatenate([current_tokens, [[token]]], axis=1), done
+
+        def _process_cross_attention(self, accumulated_cross_attns, content_mel_len):
+            return None
+
+        def _get_attended_frames(self, attn):
+            step = len(self._decoded_frames)
+            frame = script[min(step, len(script) - 1)]
+            self._decoded_frames.append(frame)
+            return [frame], frame
+
+        def _is_special_token(self, current_tokens):
+            return False
+
+        def _tokens_to_list(self, current_tokens, start_col):
+            return current_tokens[0, start_col:].tolist()
+
+        def _make_new_tokens_tensor(self, hypothesis):
+            return np.array([hypothesis], dtype=int)
+
+    ScriptedAligner.__abstractmethods__ = frozenset()
+    aligner = ScriptedAligner()
+    aligner._decoded_frames = []
+    aligner.cfg = SimpleNamespace(
+        audio_min_len=0.0,
+        language="en",
+        rewind_threshold=200,
+        frame_threshold=25,
+        beam_size=1,
+    )
+    aligner.max_text_len = 448
+    aligner.tokenizer = ScriptedTokenizer()
+    aligner.state = SimpleNamespace(
+        segments=[np.zeros(16000 * 30, dtype=np.float32)],
+        tokens=[prefix],
+        last_attend_frame=last_attend_frame,
+        cumulative_time_offset=0.0,
+        global_time_offset=0.0,
+        first_timestamp=None,
+        speaker=-1,
+        detected_language="fa",
+        pending_incomplete_tokens=[],
+        pending_incomplete_token_timestamps=[],
+        pending_retries=0,
+        clean_cache=lambda: None,
+    )
+    return aligner
+
+
+def test_alignatt_single_attention_spike_does_not_discard_hypothesis():
+    # Real Persian session: one token attended ~17 s ahead (frame 950), then
+    # decoding continued at the true position. The next token was compared
+    # with the spike, treated as a rewind, and the whole phrase was dropped.
+    aligner = _make_alignatt_decode_tester([100, 110, 125, 950, 135, 150, 160])
+
+    words = aligner.infer()
+
+    assert [w.text for w in words] == [f" w{i}" for i in range(10, 17)]
+    # The spiked token keeps a timestamp in line with its neighbours.
+    assert words[3].start == pytest.approx(125 * 0.02)
+    assert aligner.state.last_attend_frame == 160
+
+
+def test_alignatt_sustained_backward_attention_still_rewinds():
+    aligner = _make_alignatt_decode_tester([500, 510, 520, 100, 110])
+
+    assert aligner.infer() == []
+    assert aligner.state.last_attend_frame == -200
+
+
+def test_alignatt_confirmed_forward_jump_keeps_timestamps_and_rewind_guard():
+    # A pause inside the buffer: attention jumps ahead and stays there.
+    aligner = _make_alignatt_decode_tester([100, 110, 600, 610, 620])
+
+    words = aligner.infer()
+
+    assert [w.start for w in words] == pytest.approx([2.0, 2.2, 12.0, 12.2, 12.4])
+    assert aligner.state.last_attend_frame == 620
+
+    rewound = _make_alignatt_decode_tester([100, 110, 600, 610, 620, 300])
+    assert rewound.infer() == []
+
+
 def test_alignatt_word_end_uses_next_word_timestamp_with_offset():
     aligner = _make_alignatt_timestamp_tester(offset=10.0)
 

@@ -202,6 +202,8 @@ class AlignAttBase(ABC):
         max_tokens = max(50, int(audio_duration_s * 15 * 1.5))
         tokens_produced = 0
         most_attended_frame = None
+        # Unconfirmed forward attention jump: (frame, timestamp index, timestamp).
+        pending_jump = None
 
         while not completed and current_tokens.shape[1] < self.max_text_len:
             tokens_produced += 1
@@ -273,7 +275,31 @@ class AlignAttBase(ABC):
                     self.state.last_attend_frame = -self.cfg.rewind_threshold
                     current_tokens = self._rewind_tokens()
                     break
+            elif self._is_unconfirmed_forward_jump(
+                most_attended_frame, pending_jump, tokens_produced
+            ):
+                # One token attending far ahead is usually an attention outlier
+                # (seen on lower-resource languages). Keep the rewind reference
+                # where it was, so the next token at the true position is not
+                # mistaken for a rewind. Accept the jump once a token confirms it.
+                logger.debug(
+                    f"[attention jump held] frame {most_attended_frame}, "
+                    f"reference {self.state.last_attend_frame}"
+                )
+                pending_jump = (
+                    most_attended_frame,
+                    len(l_absolute_timestamps) - 1,
+                    l_absolute_timestamps[-1],
+                )
+                if len(l_absolute_timestamps) >= 2:
+                    l_absolute_timestamps[-1] = l_absolute_timestamps[-2]
             else:
+                if pending_jump is not None and self._confirms_jump(
+                    most_attended_frame, pending_jump[0]
+                ):
+                    _, idx, original_timestamp = pending_jump
+                    l_absolute_timestamps[idx] = original_timestamp
+                pending_jump = None
                 self.state.last_attend_frame = most_attended_frame
 
             if content_mel_len - most_attended_frame <= (
@@ -320,6 +346,23 @@ class AlignAttBase(ABC):
         self._handle_pending_tokens(split_words, split_tokens, token_timestamps)
 
         return timestamped_words
+
+    # === Attention jump tracking ===
+
+    def _confirms_jump(self, frame, jump_frame):
+        return abs(frame - jump_frame) <= self.cfg.rewind_threshold
+
+    def _is_unconfirmed_forward_jump(self, frame, pending_jump, tokens_produced):
+        """True when ``frame`` leaps ahead of the reference without confirmation.
+
+        The first token of a pass has no in-pass reference and is accepted as
+        before. A leap is confirmed when it lands near a held jump.
+        """
+        if tokens_produced <= 1:
+            return False
+        if frame - self.state.last_attend_frame <= self.cfg.rewind_threshold:
+            return False
+        return pending_jump is None or not self._confirms_jump(frame, pending_jump[0])
 
     # === Post-decode shared helpers ===
 
